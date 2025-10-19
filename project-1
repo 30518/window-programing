@@ -1,0 +1,171 @@
+#include <windows.h>
+#include <TCHAR.H>
+
+
+LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
+
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int nCmdShow)
+{
+
+
+
+    HWND     hwnd;
+    MSG   msg;
+
+    WNDCLASS WndClass;
+
+
+
+    WndClass.style = CS_HREDRAW | CS_VREDRAW;
+    WndClass.lpfnWndProc = WndProc;
+    WndClass.cbClsExtra = 0;
+    WndClass.cbWndExtra = 0;
+    WndClass.hInstance = hInstance;
+    WndClass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+    WndClass.hCursor = LoadCursor(NULL, IDC_ARROW);
+    WndClass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+    WndClass.lpszMenuName = NULL;
+    WndClass.lpszClassName = _T("Window Class Name");
+
+
+    RegisterClass(&WndClass);
+
+
+    hwnd = CreateWindow(_T("Window Class Name"), _T("Window Title Name"),
+        WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT,
+        CW_USEDEFAULT,
+        CW_USEDEFAULT,
+        CW_USEDEFAULT,
+        NULL,
+        NULL,
+        hInstance,
+        NULL
+    );
+
+
+
+    ShowWindow(hwnd, nCmdShow);
+    UpdateWindow(hwnd);
+
+
+
+    while (GetMessage(&msg, NULL, 0, 0))
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+    return (int)msg.wParam;
+}
+
+
+
+
+
+
+
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    // 연습문제 7번 방향 버튼
+    static RECT btn[4] = {
+        {  50,100,100,150 }, // 왼쪽
+        { 100, 50,150,100 }, // 위쪽
+        { 150,100,200,150 }, // 오른쪽
+        { 100,150,150,200 }  // 아래쪽
+    };
+    static const TCHAR* label[4] = { _T("왼쪽"), _T("위쪽"), _T("오른쪽"), _T("아래쪽") };
+    static int select = -1;
+
+    // 실습 3-3 원 이동
+    static RECT rcClient;
+    static int cx, cy;
+    static bool pressing = false;
+    const int R = 20;
+    const int STEP = 40;
+
+    // 창 밖으로 나가지 않게 보정
+    auto Clamp = [&](int& x, int& y) {
+        if (x - R < rcClient.left)   x = rcClient.left + R;
+        if (y - R < rcClient.top)    y = rcClient.top + R;
+        if (x + R > rcClient.right)  x = rcClient.right - R;
+        if (y + R > rcClient.bottom) y = rcClient.bottom - R;
+        };
+
+    switch (msg)
+    {
+    // 처음 실행
+    case WM_CREATE:
+        GetClientRect(hwnd, &rcClient);
+        cx = (rcClient.right - rcClient.left) / 2;
+        cy = (rcClient.bottom - rcClient.top) / 2;
+        Clamp(cx, cy);
+        return 0;
+        
+    // 창 크기 변경 시
+    case WM_SIZE:
+        GetClientRect(hwnd, &rcClient);
+        Clamp(cx, cy);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return 0;
+
+    case WM_PAINT:
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+
+        // 원
+        if (pressing) {
+            HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(LTGRAY_BRUSH));
+            Ellipse(hdc, cx - R, cy - R, cx + R, cy + R);
+            SelectObject(hdc, oldBrush);
+        }
+        else {
+            Ellipse(hdc, cx - R, cy - R, cx + R, cy + R);
+        }
+
+        // 방향키 표시
+        for (int i = 0; i < 4; ++i) {
+            if (i == select) {
+                HBRUSH red = CreateSolidBrush(RGB(255, 0, 0));
+                HBRUSH old = (HBRUSH)SelectObject(hdc, red);
+                Rectangle(hdc, btn[i].left, btn[i].top, btn[i].right, btn[i].bottom);
+                SelectObject(hdc, old);
+                DeleteObject(red);
+            }
+            else {
+                Rectangle(hdc, btn[i].left, btn[i].top, btn[i].right, btn[i].bottom);
+            }
+            DrawText(hdc, label[i], -1, &btn[i], DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+        }
+
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    // 방향키 눌렀을 때 인식
+    case WM_KEYDOWN:
+        pressing = true;
+        switch (wParam) {
+        case VK_LEFT:   select = 0; cx -= STEP; break;
+        case VK_UP:     select = 1; cy -= STEP; break;
+        case VK_RIGHT:  select = 2; cx += STEP; break;
+        case VK_DOWN:   select = 3; cy += STEP; break;
+        default: return 0;
+        }
+        Clamp(cx, cy);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return 0;
+
+    //방향키 뗐을 때 멈추기
+    case WM_KEYUP:
+        pressing = false;
+        select = -1;
+        InvalidateRect(hwnd, NULL, TRUE);
+        return 0;
+
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
